@@ -768,3 +768,19 @@ models:
       date: "2025-03-24"
       input: 0.90   # Off Fireworks pricing page 3/5/2024
       output: 0.90
+
+  - name: "local-llama-minimal"
+    model_name: "llama-3-8b"
+    provider: "localllama"
+    pricing:
+      date: "2024-07-01"
+      input: 0.0
+      output: 0.0
+    kwargs:
+      model_path: "/path/to/llama"
+      gpu_memory_utilization: 0.5
+      seed: 42
+      prm_config:
+        prm_model_path: "/path/to/prm"
+        prm_batch_size: 4
+        # Add any other PRM config fields as needed
