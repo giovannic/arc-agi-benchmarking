@@ -2,7 +2,7 @@ from .provider import ProviderAdapter
 from arc_agi_benchmarking.schemas import Attempt, AttemptMetadata, Choice, Message, Usage, Cost, CompletionTokensDetails
 from datetime import datetime, timezone
 from sal.config import Config
-from vllm import LLM
+from vllm import LLM, SamplingParams
 from sal.models.reward_models import load_prm
 from sal.search.best_of_n import best_of_n
 import numpy as np
@@ -22,11 +22,12 @@ class LocalLlamaAdapter(ProviderAdapter):
                   gpu_memory_utilization=getattr(config, 'gpu_memory_utilization', 0.5),
                   enable_prefix_caching=True,
                   seed=getattr(config, 'seed', 42))
-        prm_config = self.model_config.kwargs.get('prm_config', {})
-        prm = load_prm(Config(**prm_config))
+        #prm_config = self.model_config.kwargs.get('prm_config', {})
+        #prm = load_prm(Config(**prm_config))
+        prm = None
         self._config = config
         self._llm = llm
-        self._prm = prm
+        #self._prm = prm
         return (llm, prm)
 
     def make_prediction(self, prompt: str, task_id: str, test_id: str, pair_index: int) -> Attempt:
@@ -35,12 +36,18 @@ class LocalLlamaAdapter(ProviderAdapter):
         logger.info(f"LocalLlamaAdapter prompt: {prompt}")
         # result = best_of_n(x, self._config, self._llm, self._prm)  # For future use
         # Prepare input for LLM
-        sampling_params = self._llm.sampling_params_class(
+        #sampling_params = self._llm.sampling_params_class(
+        #    temperature=getattr(self._config, 'temperature', 0.0),
+        #    max_tokens=getattr(self._config, 'max_tokens', 512),
+        #    top_p=getattr(self._config, 'top_p', 1.0),
+        #    n=1
+        #)
+        sampling_params = SamplingParams(
             temperature=getattr(self._config, 'temperature', 0.0),
             max_tokens=getattr(self._config, 'max_tokens', 512),
-            top_p=getattr(self._config, 'top_p', 1.0),
             n=1
         )
+
         responses = self._llm.generate(prompt, sampling_params=sampling_params, use_tqdm=False)
         # Assume responses is a list of objects with an 'outputs' attribute
         raw_response = None

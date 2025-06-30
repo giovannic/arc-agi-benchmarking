@@ -777,8 +777,9 @@ models:
       input: 0.0
       output: 0.0
     kwargs:
-      model_path: "google/gemma-2-2b-it"
+      model_path: "meta-llama/Llama-3.2-1B-Instruct"
       gpu_memory_utilization: 0.5
+      max_tokens: 100000
       seed: 42
       prm_config:
         model_path: "peiyi9979/math-shepherd-mistral-7b-prm"
