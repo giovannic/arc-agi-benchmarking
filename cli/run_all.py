@@ -20,7 +20,7 @@ if src_dir not in sys.path:
 
 from main import ARCTester
 from arc_agi_benchmarking.utils.task_utils import read_models_config, read_provider_rate_limits
-from arc_agi_benchmarking.utils.rate_limiter import AsyncRequestRateLimiter
+from arc_agi_benchmarking.utils.rate_limiter import AsyncRequestRateLimiter, AsyncSingleRequestLimiter, RateLimiter
 from arc_agi_benchmarking.utils.metrics import set_metrics_enabled, set_metrics_filename_prefix
 
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type, before_sleep_log
@@ -79,7 +79,7 @@ DEFAULT_RETRY_ATTEMPTS = 2
 # DEFAULT_PRINT_LOGS = False # This is now controlled by the global log level
 
 # --- Globals for Orchestrator ---
-PROVIDER_RATE_LIMITERS: Dict[str, AsyncRequestRateLimiter] = {}
+PROVIDER_RATE_LIMITERS: Dict[str, RateLimiter] = {}
 MODEL_CONFIG_CACHE: Dict[str, Any] = {}
 
 def get_model_config(config_name: str):
@@ -87,7 +87,7 @@ def get_model_config(config_name: str):
         MODEL_CONFIG_CACHE[config_name] = read_models_config(config_name)
     return MODEL_CONFIG_CACHE[config_name]
 
-def get_or_create_rate_limiter(provider_name: str, all_provider_limits: Dict) -> AsyncRequestRateLimiter:
+def get_or_create_rate_limiter(provider_name: str, all_provider_limits: Dict) -> RateLimiter:
     if provider_name not in PROVIDER_RATE_LIMITERS:
         if provider_name not in all_provider_limits:
             logger.warning(f"No rate limit configuration found for provider '{provider_name}' in provider_config.yml. Using default ({DEFAULT_RATE_LIMIT_RATE} req/{DEFAULT_RATE_LIMIT_PERIOD}s).")
@@ -97,21 +97,25 @@ def get_or_create_rate_limiter(provider_name: str, all_provider_limits: Dict) ->
             actual_capacity_for_limiter = max(1.0, actual_rate_for_limiter)
         else:
             limits = all_provider_limits[provider_name]
-            config_rate = limits['rate']
-            config_period = limits['period']
-            if config_period <= 0:
-                actual_rate_for_limiter = float('inf')
-                actual_capacity_for_limiter = float('inf')
-                logger.warning(f"Provider '{provider_name}' has period <= 0 in config. Treating as unconstrained.")
+            if 'sequential' in limits:
+                logger.info(f"Provider '{provider_name}' is configured to be sequential. Using AsyncSingleRequestLimiter.")
+                PROVIDER_RATE_LIMITERS[provider_name] = AsyncSingleRequestLimiter()
             else:
-                calculated_rps = config_rate / config_period
-                actual_rate_for_limiter = calculated_rps
-                actual_capacity_for_limiter = max(1.0, calculated_rps)
-        logger.info(f"Initializing rate limiter for provider '{provider_name}' with rate={actual_rate_for_limiter:.2f} req/s, capacity={actual_capacity_for_limiter:.2f}.")
-        PROVIDER_RATE_LIMITERS[provider_name] = AsyncRequestRateLimiter(rate=actual_rate_for_limiter, capacity=actual_capacity_for_limiter)
+                config_rate = limits['rate']
+                config_period = limits['period']
+                if config_period <= 0:
+                    actual_rate_for_limiter = float('inf')
+                    actual_capacity_for_limiter = float('inf')
+                    logger.warning(f"Provider '{provider_name}' has period <= 0 in config. Treating as unconstrained.")
+                else:
+                    calculated_rps = config_rate / config_period
+                    actual_rate_for_limiter = calculated_rps
+                    actual_capacity_for_limiter = max(1.0, calculated_rps)
+                logger.info(f"Initializing rate limiter for provider '{provider_name}' with rate={actual_rate_for_limiter:.2f} req/s, capacity={actual_capacity_for_limiter:.2f}.")
+                PROVIDER_RATE_LIMITERS[provider_name] = AsyncRequestRateLimiter(rate=actual_rate_for_limiter, capacity=actual_capacity_for_limiter)
     return PROVIDER_RATE_LIMITERS[provider_name]
 
-async def run_single_test_wrapper(config_name: str, task_id: str, limiter: AsyncRequestRateLimiter,
+async def run_single_test_wrapper(config_name: str, task_id: str, limiter: RateLimiter,
                                   data_dir: str, submissions_root: str, # Changed from save_submission_dir_base
                                   overwrite_submission: bool, print_submission: bool,
                                   num_attempts: int, retry_attempts: int) -> bool: # removed print_logs

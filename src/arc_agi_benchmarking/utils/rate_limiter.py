@@ -1,7 +1,33 @@
 import asyncio
 import time
 
-class AsyncRequestRateLimiter:
+class RateLimiter:
+    """
+    A base class for rate limiters.
+    """
+    def __init__(self):
+        pass
+
+    async def acquire(self, requests_needed: int = 1) -> None:
+        """
+        Acquires the specified number of requests, waiting if necessary.
+        """
+        pass
+
+    async def __aenter__(self):
+        """
+        Async context manager entry point.
+        """
+        pass
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """
+        Async context manager exit point.
+        """
+        pass
+    
+
+class AsyncRequestRateLimiter(RateLimiter):
     """
     An asynchronous request-based rate limiter using the token bucket algorithm.
     Uses standard floats for rate and request count tracking.
@@ -103,3 +129,24 @@ class AsyncRequestRateLimiter:
          async with self._lock:
              self._refill()
              return self._available_requests 
+
+class AsyncSingleRequestLimiter(RateLimiter):
+    """
+    An asynchronous limiter that only allows one request at a time (no concurrency).
+    Intended for use with local models that cannot process multiple requests concurrently.
+    Usage:
+        async with limiter:
+            ...
+    """
+    def __init__(self):
+        self._lock = asyncio.Lock()
+
+    async def acquire(self):
+        await self._lock.acquire()
+
+    async def __aenter__(self):
+        await self.acquire()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self._lock.release() 

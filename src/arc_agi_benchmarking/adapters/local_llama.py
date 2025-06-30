@@ -36,12 +36,6 @@ class LocalLlamaAdapter(ProviderAdapter):
         logger.info(f"LocalLlamaAdapter prompt: {prompt}")
         # result = best_of_n(x, self._config, self._llm, self._prm)  # For future use
         # Prepare input for LLM
-        #sampling_params = self._llm.sampling_params_class(
-        #    temperature=getattr(self._config, 'temperature', 0.0),
-        #    max_tokens=getattr(self._config, 'max_tokens', 512),
-        #    top_p=getattr(self._config, 'top_p', 1.0),
-        #    n=1
-        #)
         sampling_params = SamplingParams(
             temperature=getattr(self._config, 'temperature', 0.0),
             max_tokens=getattr(self._config, 'max_tokens', 512),
