@@ -1,5 +1,6 @@
 import sys
 import os
+from typing import Tuple
 
 # Added: Add the src directory to sys.path to allow direct execution of main.py
 # This assumes main.py is in the project root and 'src' is a subdirectory.
@@ -29,12 +30,13 @@ from arc_agi_benchmarking.prompts.prompt_manager import convert_task_pairs_to_pr
 from typing import List, Optional
 import argparse
 import logging
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-class ARCTester:
+class BaseARCTester(ABC):
     def __init__(self, config: str, save_submission_dir: str, overwrite_submission: bool, print_submission: bool, num_attempts: int, retry_attempts: int):
         self.config = config
         self.model_config = utils.read_models_config(config)
@@ -66,34 +68,17 @@ class ARCTester:
             return LocalLlamaAdapter(self.config)
         else:
             raise ValueError(f"Unsupported provider: {provider_name}")
-        
+
+class ARCTester(BaseARCTester):
     def predict_task_output(self, training_pairs: List[ARCPair], test_input: ARCPair, task_id: str, test_id: str, pair_index: int):
-        """
-        Given a task, predict the test output. This reponse may need parsing.
-
-        Convert the training pairs and test pairs into a prompt
-        Give the prompt to the LLM
-        return the response
-        """
-
-        # Convert the training pairs and test pairs into a prompt
         prompt = convert_task_pairs_to_prompt(training_pairs, test_input)
-
         logger.info(f"Making prediction for task {task_id}, test {test_id}, pair_index {pair_index}")
         response: Attempt = self.provider.make_prediction(prompt, task_id=task_id, test_id=test_id, pair_index=pair_index)
-
         return response
 
     def get_task_prediction(self, training_pairs: List[ARCPair], test_input: ARCPair, task_id: str, test_id: str, pair_index: int) -> Attempt:
-        """
-        Modified to return the full Attempt object instead of just the parsed answer
-        Uses the refactored parsing logic from arc_agi_benchmarking.parsing
-        """
-        # Get the initial response as an Attempt object
         attempt: Attempt = self.predict_task_output(training_pairs, test_input, task_id, test_id, pair_index)
-
         try:
-            # If the validator couldn't parse the answer, fall back to the provider extractor
             if isinstance(attempt.answer, str):
                 parsed = self.provider.extract_json_from_response(attempt.answer)
                 if parsed is None:
@@ -191,7 +176,6 @@ class ARCTester:
             if self.print_submission:
                 # Log the submission content; use json.dumps for potentially large structures
                 logger.info(f"Final submission for task {task_id}, ModelConfig {test_id}:\n{json.dumps(task_attempts, indent=4)}")
-
             if self.save_submission_dir:
                 utils.save_submission(self.save_submission_dir, task_id, task_attempts)
                 logger.info(f"Submission for task {task_id}, ModelConfig {test_id} saved to {self.save_submission_dir}")
@@ -199,6 +183,139 @@ class ARCTester:
             logger.warning(f"No valid predictions for task {task_id}, ModelConfig {test_id} after all attempts. Skipping submission.")
 
         return task_attempts if task_attempts else None
+
+class BatchedARCTester(BaseARCTester):
+
+    def predict_batched_task_output(
+        self,
+        training_pairs: List[List[ARCPair]],
+        test_inputs_per_task: List[List[ARCPair]],
+        task_ids: List[str],
+        test_ids: List[str],
+        ) -> List[Attempt]:
+        results: List[Tuple[str, str, str, int]] = [
+            (
+                convert_task_pairs_to_prompt(tp, ti), 
+                task_id,
+                test_id,
+                pair_index
+            )
+            for tp, test_inputs, task_id, test_id
+            in zip(
+                training_pairs,
+                test_inputs_per_task,
+                task_ids,
+                test_ids
+            )
+            for pair_index, ti in enumerate(test_inputs)
+        ]
+        prompts, task_ids, test_ids, pair_indices = zip(*results) # type: ignore
+        if not hasattr(self.provider, "make_batch_prediction"):
+            raise ValueError("Provider does not support batch prediction")
+        response: List[Attempt] = self.provider.make_batch_prediction( # type: ignore
+            prompts,
+            task_ids=task_ids,
+            test_ids=test_ids,
+            pair_indices=pair_indices
+        )
+        return response
+
+
+    def get_batched_task_prediction(
+        self,
+        training_pairs: List[List[ARCPair]],
+        test_inputs: List[List[ARCPair]],
+        task_ids: List[str],
+        test_ids: List[str],
+        ) -> List[Attempt]:
+        attempts: List[Attempt] = self.predict_batched_task_output(
+            training_pairs,
+            test_inputs,
+            task_ids,
+            test_ids
+        )
+        for i, attempt in enumerate(attempts):
+            try:
+                if isinstance(attempt.answer, str):
+                    parsed = self.provider.extract_json_from_response(attempt.answer)
+                    if parsed is None:
+                        raise ValueError(
+                            f"Failed to parse answer for task {task_ids[i]}, test {test_ids[i]}, pair_index {pair_indices[i]}")
+                    attempt.answer = parsed
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.error(
+                    f"Parsing/Validation failed for task {task_ids[i]}, test {test_ids[i]}, pair_index {pair_indices[i]}: {e}",
+                    exc_info=True,
+                )
+        return attempts
+
+    def generate_batched_task_solutions(self, data_dir: str, task_ids: List[str]):
+        for task_id in task_ids:
+            utils.validate_data(data_dir, task_id)
+        
+        test_ids = [f'{self.config}_i' for i in range(len(task_ids))]
+
+        # Logic for overwrite. If save_submission_dir is provided, check if the submission already exists
+        if self.save_submission_dir and not self.overwrite_submission:
+            task_ids = [
+                task_id for task_id in task_ids
+                if not utils.submission_exists(self.save_submission_dir, task_id)
+            ]
+        
+        train_pairs = [
+            utils.get_train_pairs_from_task(data_dir, task_id)
+            for task_id in task_ids
+        ]
+        test_input_pairs = [
+            utils.get_test_input_from_task(data_dir, task_id)
+            for task_id in task_ids
+        ]
+
+        attempting_ids = task_ids
+
+        for _ in range(self.num_attempts):
+            attempts = self.get_batched_task_prediction(
+                training_pairs=train_pairs,
+                test_inputs=test_input_pairs,
+                task_ids=attempting_ids,
+                test_ids=test_ids,
+            )
+            task_ids = [
+                task_id
+                for attempt, task_id in zip(attempts, attempting_ids)
+                if attempt.answer is None
+            ]
+            pair_indices = [
+                pair_index
+                for attempt, pair_index in zip(attempts, pair_indices)
+                if attempt.answer is None
+            ]
+            test_ids = [
+                test_id
+                for attempt, test_id in zip(attempts, test_ids)
+                if attempt.answer is None
+            ]
+            if not attempting_ids:
+                break
+
+        attempts = [
+            attempt
+            for attempt in attempts
+            if attempt.answer is not None
+        ]
+
+        if attempts:
+            for task_id, attempt in zip(task_ids, attempts):
+                if self.print_submission:
+                    # Log the submission content; use json.dumps for potentially large structures
+                    logger.info(f"Final submission for task {task_id}, ModelConfig {test_ids[0]}:\n{json.dumps(attempt, indent=4)}")
+                if self.save_submission_dir:
+                    utils.save_submission(self.save_submission_dir, task_id, attempt)
+                    logger.info(f"Submission for task {task_id}, ModelConfig {test_ids[0]} saved to {self.save_submission_dir}")
+        else:
+            logger.warning(f"No valid predictions for any tasks. Skipping submission.")
+
+        return attempts if attempts else None
 
 def main_cli(cli_args: Optional[List[str]] = None):
     parser = argparse.ArgumentParser(description="Run ARC Tester")

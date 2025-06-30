@@ -53,7 +53,6 @@ class LocalLlamaAdapter(ProviderAdapter):
                 break
             if answer:
                 break
-        logger.info(f"LocalLlamaAdapter raw response: {raw_response}")
         # For now, use dummy values for token/cost accounting
         prompt_tokens = 0
         completion_tokens_count = 0
@@ -139,4 +138,78 @@ class LocalLlamaAdapter(ProviderAdapter):
                     return output.text if isinstance(output.text, list) else json.loads(output.text)
                 except Exception:
                     continue
-        return None 
+        return None
+
+    def make_batched_prediction(self, prompts, task_ids, test_ids, pair_indices):
+        """
+        Generate completions for a batch of prompts using vLLM and return a list of Attempts.
+        Args:
+            prompts: List of prompt strings
+            task_ids: List of task_id strings (same length as prompts)
+            test_ids: List of test_id strings (same length as prompts)
+            pair_indices: List of pair_index ints (same length as prompts)
+        Returns:
+            List of Attempt objects
+        """
+        start_time = datetime.now(timezone.utc)
+        sampling_params = SamplingParams(
+            temperature=getattr(self._config, 'temperature', 0.0),
+            max_tokens=getattr(self._config, 'max_tokens', 512),
+            n=1
+        )
+        responses = self._llm.generate(prompts, sampling_params=sampling_params, use_tqdm=False)
+        attempts = []
+        for i, r in enumerate(responses):
+            raw_response = None
+            answer = ""
+            for output in r.outputs:
+                raw_response = output.text
+                answer = raw_response
+                break
+            # For now, use dummy values for token/cost accounting
+            prompt_tokens = 0
+            completion_tokens_count = 0
+            total_tokens = prompt_tokens + completion_tokens_count
+            reasoning_tokens = 0
+            input_choices = [
+                Choice(index=0, message=Message(role="user", content=prompts[i]))
+            ]
+            response_choices = [
+                Choice(index=1, message=Message(role="assistant", content=answer))
+            ]
+            all_choices = input_choices + response_choices
+            input_cost_per_token = getattr(self.model_config.pricing, 'input', 0) / 1_000_000
+            output_cost_per_token = getattr(self.model_config.pricing, 'output', 0) / 1_000_000
+            prompt_cost = prompt_tokens * input_cost_per_token
+            completion_cost = completion_tokens_count * output_cost_per_token
+            reasoning_cost = reasoning_tokens * output_cost_per_token
+            end_time = datetime.now(timezone.utc)
+            metadata = AttemptMetadata(
+                model=self.model_config.model_name,
+                provider=self.model_config.provider,
+                start_timestamp=start_time,
+                end_timestamp=end_time,
+                choices=all_choices,
+                kwargs=self.model_config.kwargs,
+                usage=Usage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens_count,
+                    total_tokens=total_tokens,
+                    completion_tokens_details=CompletionTokensDetails(
+                        reasoning_tokens=reasoning_tokens,
+                        accepted_prediction_tokens=completion_tokens_count,
+                        rejected_prediction_tokens=0
+                    )
+                ),
+                cost=Cost(
+                    prompt_cost=prompt_cost,
+                    completion_cost=completion_cost,
+                    reasoning_cost=reasoning_cost,
+                    total_cost=prompt_cost + completion_cost + reasoning_cost
+                ),
+                task_id=task_ids[i],
+                pair_index=pair_indices[i],
+                test_id=test_ids[i]
+            )
+            attempts.append(Attempt(answer=answer, metadata=metadata))
+        return attempts 
