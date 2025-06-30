@@ -9,3 +9,4 @@ from .hugging_face_fireworks import HuggingFaceFireworksAdapter
 from .fireworks import FireworksAdapter
 from .grok import GrokAdapter
 from .openrouter import OpenRouterAdapter
+from .local_llama import LocalLlamaAdapter
