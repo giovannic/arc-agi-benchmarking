@@ -7,6 +7,9 @@ from sal.models.reward_models import load_prm
 from sal.search.best_of_n import best_of_n
 import numpy as np
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class LocalLlamaAdapter(ProviderAdapter):
     def init_client(self):
@@ -29,13 +32,30 @@ class LocalLlamaAdapter(ProviderAdapter):
     def make_prediction(self, prompt: str, task_id: str, test_id: str, pair_index: int) -> Attempt:
         start_time = datetime.now(timezone.utc)
         x = {"problem": [prompt]}
-        result = best_of_n(x, self._config, self._llm, self._prm)
-        answer = result["pred"][0]
-        completions = result["completions"][0]
-        completion_tokens = result["completion_tokens"][0]
+        logger.info(f"LocalLlamaAdapter prompt: {prompt}")
+        # result = best_of_n(x, self._config, self._llm, self._prm)  # For future use
+        # Prepare input for LLM
+        sampling_params = self._llm.sampling_params_class(
+            temperature=getattr(self._config, 'temperature', 0.0),
+            max_tokens=getattr(self._config, 'max_tokens', 512),
+            top_p=getattr(self._config, 'top_p', 1.0),
+            n=1
+        )
+        responses = self._llm.generate(prompt, sampling_params=sampling_params, use_tqdm=False)
+        # Assume responses is a list of objects with an 'outputs' attribute
+        raw_response = None
+        answer = ""
+        for r in responses:
+            for output in r.outputs:
+                raw_response = output.text
+                answer = raw_response
+                break
+            if answer:
+                break
+        logger.info(f"LocalLlamaAdapter raw response: {raw_response}")
         # For now, use dummy values for token/cost accounting
         prompt_tokens = 0
-        completion_tokens_count = completion_tokens[0] if completion_tokens else 0
+        completion_tokens_count = 0
         total_tokens = prompt_tokens + completion_tokens_count
         reasoning_tokens = 0
         input_choices = [

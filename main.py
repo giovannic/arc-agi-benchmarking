@@ -24,9 +24,9 @@ from arc_agi_benchmarking.adapters import (
 from dotenv import load_dotenv
 import arc_agi_benchmarking.utils as utils
 from arc_agi_benchmarking.utils.metrics import timeit, set_metrics_enabled
-from arc_agi_benchmarking.schemas import ARCTaskOutput, ARCPair, Attempt
+from arc_agi_benchmarking.schemas import ARCPair, Attempt
 from arc_agi_benchmarking.prompts.prompt_manager import convert_task_pairs_to_prompt
-from typing import List, Any, Optional
+from typing import List, Optional
 import argparse
 import logging
 
