@@ -62,7 +62,7 @@ class ARCTester:
             return GrokAdapter(self.config)
         elif provider_name == "openrouter":
             return OpenRouterAdapter(self.config)
-        elif provider_name == "local_llama":
+        elif provider_name == "localllama":
             return LocalLlamaAdapter(self.config)
         else:
             raise ValueError(f"Unsupported provider: {provider_name}")

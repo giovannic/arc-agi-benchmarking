@@ -777,10 +777,11 @@ models:
       input: 0.0
       output: 0.0
     kwargs:
-      model_path: "/path/to/llama"
+      model_path: "google/gemma-2-2b-it"
       gpu_memory_utilization: 0.5
       seed: 42
       prm_config:
-        prm_model_path: "/path/to/prm"
-        prm_batch_size: 4
+        model_path: "peiyi9979/math-shepherd-mistral-7b-prm"
+        seed: 42
+        #prm_batch_size: 4
         # Add any other PRM config fields as needed

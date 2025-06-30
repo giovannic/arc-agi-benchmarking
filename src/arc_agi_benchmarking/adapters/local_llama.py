@@ -17,7 +17,7 @@ class LocalLlamaAdapter(ProviderAdapter):
         config_kwargs = dict(self.model_config.kwargs)
         config_kwargs.setdefault('approach', 'best_of_n')
         config_kwargs['n'] = 1
-        config = Config(**config_kwargs)
+        config = Config(**{k: v for k, v in config_kwargs.items() if k != 'prm_config'})
         llm = LLM(model=config.model_path,
                   gpu_memory_utilization=getattr(config, 'gpu_memory_utilization', 0.5),
                   enable_prefix_caching=True,
