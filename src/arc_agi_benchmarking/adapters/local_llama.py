@@ -34,7 +34,6 @@ class LocalLlamaAdapter(ProviderAdapter):
     def make_prediction(self, prompt: str, task_id: str, test_id: str, pair_index: int) -> Attempt:
         start_time = datetime.now(timezone.utc)
         x = {"problem": [prompt]}
-        logger.info(f"LocalLlamaAdapter prompt: {prompt}")
         # result = best_of_n(x, self._config, self._llm, self._prm)  # For future use
         # Prepare input for LLM
         sampling_params = SamplingParams(
