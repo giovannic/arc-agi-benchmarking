@@ -214,14 +214,7 @@ class LocalLlamaAdapter(ProviderAdapter):
             try:
                 attempt = Attempt(answer=answer, metadata=metadata)
             except (json.JSONDecodeError, ValueError) as e:
-                try:
-                    response = self.extract_json_from_response(answer)
-                    attempt = Attempt(answer=response, metadata=metadata)
-                except Exception as e:
-                    logger.error(
-                        f"Parsing/Validation failed for task {task_ids[i]}, test {test_ids[i]}, pair_index {pair_indices[i]}: {e}",
-                        exc_info=True,
-                    )
+                attempt = Attempt(answer='[[]]', metadata=metadata)
 
             attempts.append(attempt)
         return attempts 
