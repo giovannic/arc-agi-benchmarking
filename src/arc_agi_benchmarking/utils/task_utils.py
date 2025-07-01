@@ -45,7 +45,7 @@ def get_test_output_from_task(data_dir, task_id) -> List[List[int]]:
 def check_answer(answer: List[List[int]], correct_answer: List[List[int]]) -> bool:
     flat_answer = [item for sublist in answer for item in sublist]
     flat_correct_answer = [item for sublist in correct_answer for item in sublist]
-    return all(
+    return len(flat_answer) == len(flat_correct_answer) and all(
         a == b
         for a, b in zip(flat_answer, flat_correct_answer)
     )

@@ -236,14 +236,17 @@ class BatchedARCTester(BaseARCTester):
             task_ids,
             test_ids
         )
-        for i, attempt in enumerate(attempts):
+
+        if not hasattr(self.provider, "extract_batched_json_from_response"):
+            raise ValueError("Provider does not support batch prediction")
+        answers = [attempt.answer for attempt in attempts]
+        parsed = self.provider.extract_batched_json_from_response(answers) # type: ignore
+        for i, (parsed_answer, attempt) in enumerate(zip(parsed, attempts)):
+            if parsed_answer is None:
+                raise ValueError(
+                    f"Failed to parse answer for task {task_ids[i]}, test {test_ids[i]}")
             try:
-                if isinstance(attempt.answer, str):
-                    parsed = self.provider.extract_json_from_response(attempt.answer)
-                    if parsed is None:
-                        raise ValueError(
-                            f"Failed to parse answer for task {task_ids[i]}, test {test_ids[i]}")
-                    attempt.answer = parsed
+                attempt.answer = parsed_answer
             except (json.JSONDecodeError, ValueError) as e:
                 logger.error(
                     f"Parsing/Validation failed for task {task_ids[i]}, test {test_ids[i]}",

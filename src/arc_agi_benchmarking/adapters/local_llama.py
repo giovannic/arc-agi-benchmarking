@@ -218,3 +218,56 @@ class LocalLlamaAdapter(ProviderAdapter):
 
             attempts.append(attempt)
         return attempts 
+
+    def extract_batched_json_from_response(self, input_responses: list[str]):
+        """
+        Extract JSON arrays from a batch of input responses using vLLM batching.
+        Returns a list of parsed outputs (list of lists of ints or empty list on failure for each input).
+        """
+        json_schema = {
+            "type": "array",
+            "items": {
+                "type": "array",
+                "items": {"type": "integer"}
+            }
+        }
+        prompts = [
+            f"Extract the test output as a JSON array of arrays of integers from the following response. Only output the JSON, nothing else.\n\nResponse:\n{resp}"
+            for resp in input_responses
+        ]
+        convs = [
+            [
+                {"role": "system", "content": getattr(self._config, 'system_prompt', "You are a helpful assistant.")},
+                {"role": "user", "content": prompt}
+            ]
+            for prompt in prompts
+        ]
+        tokenizer = self._llm.get_tokenizer()
+        if getattr(self._config, 'custom_chat_template', None) is not None:
+            tokenizer.chat_template = self._config.custom_chat_template
+        templated_convs = [
+            tokenizer.apply_chat_template([conv], tokenize=False, add_generation_prompt=True)
+            for conv in convs
+        ]
+        sampling_params = SamplingParams(
+            temperature=getattr(self._config, 'temperature', 0.0),
+            max_tokens=getattr(self._config, 'max_tokens', 512),
+            n=1
+        )
+        responses = self._llm.generate(
+            templated_convs,
+            sampling_params=sampling_params,
+            use_tqdm=False,
+            guided_options_request={"guided_json": json_schema}
+        )
+        results = []
+        for r in responses:
+            parsed = []
+            for output in r.outputs:
+                try:
+                    parsed = output.text if isinstance(output.text, list) else json.loads(output.text)
+                    break
+                except Exception:
+                    continue
+            results.append(parsed)
+        return results 
