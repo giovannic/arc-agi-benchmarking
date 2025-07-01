@@ -240,11 +240,11 @@ class BatchedARCTester(BaseARCTester):
                     parsed = self.provider.extract_json_from_response(attempt.answer)
                     if parsed is None:
                         raise ValueError(
-                            f"Failed to parse answer for task {task_ids[i]}, test {test_ids[i]}, pair_index {pair_indices[i]}")
+                            f"Failed to parse answer for task {task_ids[i]}, test {test_ids[i]}")
                     attempt.answer = parsed
             except (json.JSONDecodeError, ValueError) as e:
                 logger.error(
-                    f"Parsing/Validation failed for task {task_ids[i]}, test {test_ids[i]}, pair_index {pair_indices[i]}: {e}",
+                    f"Parsing/Validation failed for task {task_ids[i]}, test {test_ids[i]}",
                     exc_info=True,
                 )
         return attempts
@@ -305,13 +305,18 @@ class BatchedARCTester(BaseARCTester):
         ]
 
         if attempts:
-            for task_id, attempt in zip(task_ids, attempts):
+            for attempt in attempts:
+                task_id = attempt.metadata.task_id
+                test_id = attempt.metadata.test_id
                 if self.print_submission:
                     # Log the submission content; use json.dumps for potentially large structures
-                    logger.info(f"Final submission for task {task_id}, ModelConfig {test_ids[0]}:\n{json.dumps(attempt, indent=4)}")
+                    logger.info(f"Final submission for task {task_id}, ModelConfig {test_id}:\n{json.dumps(attempt, indent=4)}")
                 if self.save_submission_dir:
-                    utils.save_submission(self.save_submission_dir, task_id, attempt)
-                    logger.info(f"Submission for task {task_id}, ModelConfig {test_ids[0]} saved to {self.save_submission_dir}")
+                    if task_id is not None:
+                        utils.save_submission(self.save_submission_dir, task_id, attempt)
+                        logger.info(f"Submission for task {task_id}, ModelConfig {test_id} saved to {self.save_submission_dir}")
+                    else:
+                        logger.warning(f"No valid predictions for task {task_id}, ModelConfig {test_id}")
         else:
             logger.warning(f"No valid predictions for any tasks. Skipping submission.")
 

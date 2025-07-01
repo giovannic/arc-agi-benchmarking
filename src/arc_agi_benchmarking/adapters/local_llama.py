@@ -8,6 +8,7 @@ from sal.search.best_of_n import best_of_n
 import numpy as np
 import json
 import logging
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,7 @@ class LocalLlamaAdapter(ProviderAdapter):
                     continue
         return None
 
-    def make_batched_prediction(self, prompts, task_ids, test_ids, pair_indices):
+    def make_batched_prediction(self, prompts: List[str], task_ids: List[str], test_ids: List[str], pair_indices: List[int]) -> List[Attempt]:
         """
         Generate completions for a batch of prompts using vLLM and return a list of Attempts.
         Args:
@@ -211,5 +212,13 @@ class LocalLlamaAdapter(ProviderAdapter):
                 pair_index=pair_indices[i],
                 test_id=test_ids[i]
             )
-            attempts.append(Attempt(answer=answer, metadata=metadata))
+            try:
+                attempt = Attempt(answer=answer, metadata=metadata)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.error(
+                    f"Parsing/Validation failed for task {task_ids[i]}, test {test_ids[i]}, pair_index {pair_indices[i]}: {e}",
+                    exc_info=True,
+                )
+                attempt = Attempt(answer='[]', metadata=metadata)
+            attempts.append(attempt)
         return attempts 
