@@ -307,7 +307,10 @@ class BatchedARCTester(BaseARCTester):
                 # Mark the submission as correct or incorrect
                 answers = utils.get_test_output_from_task(data_dir, task_id)
                 for s in sub:
-                    s['correct'] = check_answer(s['answer'], answers[s['pair_index']])
+                    s['correct'] = check_answer(
+                        s['answer'],
+                        answers[s['metadata']['pair_index']]
+                    )
                 utils.save_submission(
                     self.save_submission_dir,
                     task_id,
