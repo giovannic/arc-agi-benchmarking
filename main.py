@@ -26,6 +26,7 @@ from arc_agi_benchmarking.adapters import (
 from dotenv import load_dotenv
 import arc_agi_benchmarking.utils as utils
 from arc_agi_benchmarking.utils.metrics import timeit, set_metrics_enabled
+from arc_agi_benchmarking.utils.task_utils import check_answer
 from arc_agi_benchmarking.schemas import ARCPair, Attempt
 from arc_agi_benchmarking.prompts.prompt_manager import convert_task_pairs_to_prompt
 from typing import List, Optional
@@ -300,6 +301,10 @@ class BatchedARCTester(BaseARCTester):
                     logger.warning(f"No valid predictions for task {task_id}, ModelConfig {test_id}")
 
             for task_id, sub in submissions.items():
+                # Mark the submission as correct or incorrect
+                answers = utils.get_test_output_from_task(data_dir, task_id)
+                for s in sub:
+                    s['correct'] = check_answer(s['answer'], answers[s['pair_index']])
                 utils.save_submission(
                     self.save_submission_dir,
                     task_id,

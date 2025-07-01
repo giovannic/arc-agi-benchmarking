@@ -31,6 +31,24 @@ def get_test_input_from_task(data_dir, task_id) -> List[ARCPair]:
 
     return pairs
 
+def get_test_output_from_task(data_dir, task_id) -> List[List[int]]:
+    task_file = os.path.join(data_dir, f"{task_id}.json")
+    with open(task_file, 'r') as f:
+        task_data = json.load(f)
+
+    return [
+        pair['output']
+        for pair in task_data['test']
+    ]
+
+
+def check_answer(answer: List[List[int]], correct_answer: List[List[int]]) -> bool:
+    flat_answer = [item for sublist in answer for item in sublist]
+    flat_correct_answer = [item for sublist in correct_answer for item in sublist]
+    return all(
+        a == b
+        for a, b in zip(flat_answer, flat_correct_answer)
+    )
 
 def save_submission(save_submission_dir: str, task_id: str, task_attempts) -> None:
     """
