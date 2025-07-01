@@ -1,6 +1,7 @@
 import sys
 import os
 from typing import Tuple
+from collections import defaultdict
 
 # Added: Add the src directory to sys.path to allow direct execution of main.py
 # This assumes main.py is in the project root and 'src' is a subdirectory.
@@ -284,26 +285,26 @@ class BatchedARCTester(BaseARCTester):
             if attempt.answer is not None
         ]
 
-        if attempts:
+        # Group attempts into a serializable object
+        if self.save_submission_dir:
+            submissions = defaultdict(list)
             for attempt in attempts:
                 task_id = attempt.metadata.task_id
                 test_id = attempt.metadata.test_id
-                if self.print_submission:
-                    # Log the submission content; use json.dumps for potentially large structures
-                    logger.info(f"Final submission for task {task_id}, ModelConfig {test_id}:\n{json.dumps(attempt, indent=4)}")
-                if self.save_submission_dir:
-                    if task_id is not None:
-                        utils.save_submission(
-                            self.save_submission_dir,
-                            task_id,
-                            attempt.model_dump(mode='json')
-                        )
-                        logger.info(f"Submission for task {task_id}, ModelConfig {test_id} saved to {self.save_submission_dir}")
-                    else:
-                        logger.warning(f"No valid predictions for task {task_id}, ModelConfig {test_id}")
-        else:
-            logger.warning(f"No valid predictions for any tasks. Skipping submission.")
+                if task_id is not None:
+                    submissions[task_id].append(
+                        attempt.model_dump(mode='json')
+                    )
+                    logger.info(f"Submission for task {task_id}, ModelConfig {test_id} saved to {self.save_submission_dir}")
+                else:
+                    logger.warning(f"No valid predictions for task {task_id}, ModelConfig {test_id}")
 
+            for task_id, sub in submissions.items():
+                utils.save_submission(
+                    self.save_submission_dir,
+                    task_id,
+                    sub
+                )
         return attempts if attempts else None
 
 def main_cli(cli_args: Optional[List[str]] = None):
