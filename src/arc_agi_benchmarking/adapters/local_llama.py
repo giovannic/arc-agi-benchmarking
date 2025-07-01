@@ -120,10 +120,9 @@ class LocalLlamaAdapter(ProviderAdapter):
         if getattr(self._config, 'custom_chat_template', None) is not None:
             tokenizer.chat_template = self._config.custom_chat_template
         templated_conv = tokenizer.apply_chat_template([conv], tokenize=False, add_generation_prompt=True)
-        sampling_params = self._llm.sampling_params_class(
-            temperature=0.0,  # Greedy decoding for extraction
-            max_tokens=512,
-            top_p=1.0,
+        sampling_params = SamplingParams(
+            temperature=getattr(self._config, 'temperature', 0.0),
+            max_tokens=getattr(self._config, 'max_tokens', 512),
             n=1
         )
         responses = self._llm.generate(
@@ -139,7 +138,7 @@ class LocalLlamaAdapter(ProviderAdapter):
                     return output.text if isinstance(output.text, list) else json.loads(output.text)
                 except Exception:
                     continue
-        return None
+        return []
 
     def make_batched_prediction(self, prompts: List[str], task_ids: List[str], test_ids: List[str], pair_indices: List[int]) -> List[Attempt]:
         """
@@ -215,10 +214,14 @@ class LocalLlamaAdapter(ProviderAdapter):
             try:
                 attempt = Attempt(answer=answer, metadata=metadata)
             except (json.JSONDecodeError, ValueError) as e:
-                logger.error(
-                    f"Parsing/Validation failed for task {task_ids[i]}, test {test_ids[i]}, pair_index {pair_indices[i]}: {e}",
-                    exc_info=True,
-                )
-                attempt = Attempt(answer='[]', metadata=metadata)
+                try:
+                    response = self.extract_json_from_response(answer)
+                    attempt = Attempt(answer=response, metadata=metadata)
+                except Exception as e:
+                    logger.error(
+                        f"Parsing/Validation failed for task {task_ids[i]}, test {test_ids[i]}, pair_index {pair_indices[i]}: {e}",
+                        exc_info=True,
+                    )
+
             attempts.append(attempt)
         return attempts 

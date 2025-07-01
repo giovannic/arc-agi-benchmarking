@@ -210,9 +210,9 @@ class BatchedARCTester(BaseARCTester):
             for pair_index, ti in enumerate(test_inputs)
         ]
         prompts, task_ids, test_ids, pair_indices = zip(*results) # type: ignore
-        if not hasattr(self.provider, "make_batch_prediction"):
+        if not hasattr(self.provider, "make_batched_prediction"):
             raise ValueError("Provider does not support batch prediction")
-        response: List[Attempt] = self.provider.make_batch_prediction( # type: ignore
+        response: List[Attempt] = self.provider.make_batched_prediction( # type: ignore
             prompts,
             task_ids=task_ids,
             test_ids=test_ids,
@@ -271,32 +271,12 @@ class BatchedARCTester(BaseARCTester):
             for task_id in task_ids
         ]
 
-        attempting_ids = task_ids
-
-        for _ in range(self.num_attempts):
-            attempts = self.get_batched_task_prediction(
-                training_pairs=train_pairs,
-                test_inputs=test_input_pairs,
-                task_ids=attempting_ids,
-                test_ids=test_ids,
-            )
-            task_ids = [
-                task_id
-                for attempt, task_id in zip(attempts, attempting_ids)
-                if attempt.answer is None
-            ]
-            pair_indices = [
-                pair_index
-                for attempt, pair_index in zip(attempts, pair_indices)
-                if attempt.answer is None
-            ]
-            test_ids = [
-                test_id
-                for attempt, test_id in zip(attempts, test_ids)
-                if attempt.answer is None
-            ]
-            if not attempting_ids:
-                break
+        attempts = self.get_batched_task_prediction(
+            training_pairs=train_pairs,
+            test_inputs=test_input_pairs,
+            task_ids=task_ids,
+            test_ids=test_ids,
+        )
 
         attempts = [
             attempt
@@ -313,7 +293,11 @@ class BatchedARCTester(BaseARCTester):
                     logger.info(f"Final submission for task {task_id}, ModelConfig {test_id}:\n{json.dumps(attempt, indent=4)}")
                 if self.save_submission_dir:
                     if task_id is not None:
-                        utils.save_submission(self.save_submission_dir, task_id, attempt)
+                        utils.save_submission(
+                            self.save_submission_dir,
+                            task_id,
+                            attempt.model_dump(mode='json')
+                        )
                         logger.info(f"Submission for task {task_id}, ModelConfig {test_id} saved to {self.save_submission_dir}")
                     else:
                         logger.warning(f"No valid predictions for task {task_id}, ModelConfig {test_id}")
