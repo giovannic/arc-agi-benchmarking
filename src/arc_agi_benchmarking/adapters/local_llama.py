@@ -218,11 +218,20 @@ class LocalLlamaAdapter(ProviderAdapter):
             attempts.append(attempt)
         return attempts 
 
-    def extract_batched_json_from_response(self, input_responses: list[str]):
+    def extract_batched_json_from_responses(self, input_responses: List[str]) -> List[List[List[int]]]:
         """
-        Extract JSON arrays from a batch of input responses using vLLM batching.
-        Returns a list of parsed outputs (list of lists of ints or empty list on failure for each input).
+        Batched version of extract_json_from_response that processes multiple responses at once.
+        
+        Args:
+            input_responses: List of response strings to extract JSON from
+            
+        Returns:
+            List of extracted JSON arrays (list of lists of integers), with empty list [] for failed extractions
         """
+        if not input_responses:
+            return []
+        
+        # JSON schema for a list of lists of integers
         json_schema = {
             "type": "array",
             "items": {
@@ -230,43 +239,54 @@ class LocalLlamaAdapter(ProviderAdapter):
                 "items": {"type": "integer"}
             }
         }
-        prompts = [
-            f"Extract the test output as a JSON array of arrays of integers from the following response. Only output the JSON, nothing else.\n\nResponse:\n{resp}"
-            for resp in input_responses
-        ]
-        convs = [
-            [
+        
+        # Create prompts for all responses
+        prompts = []
+        for input_response in input_responses:
+            prompt = f"Extract the test output as a JSON array of arrays of integers from the following response. Only output the JSON, nothing else.\n\nResponse:\n{input_response}"
+            conv = [
                 {"role": "system", "content": getattr(self._config, 'system_prompt', "You are a helpful assistant.")},
                 {"role": "user", "content": prompt}
             ]
-            for prompt in prompts
-        ]
+            prompts.append(conv)
+        
+        # Apply chat template to all conversations
         tokenizer = self._llm.get_tokenizer()
         if getattr(self._config, 'custom_chat_template', None) is not None:
             tokenizer.chat_template = self._config.custom_chat_template
-        templated_convs = [
-            tokenizer.apply_chat_template([conv], tokenize=False, add_generation_prompt=True)
-            for conv in convs
-        ]
+        
+        templated_prompts = tokenizer.apply_chat_template(prompts, tokenize=False, add_generation_prompt=True)
+        
+        # Set up sampling parameters
         sampling_params = SamplingParams(
             temperature=getattr(self._config, 'temperature', 0.0),
             max_tokens=getattr(self._config, 'max_tokens', 512),
             n=1
         )
+        
+        # Generate responses for all prompts at once
         responses = self._llm.generate(
-            templated_convs,
+            templated_prompts,
             sampling_params=sampling_params,
             use_tqdm=False,
             guided_options_request={"guided_json": json_schema}
         )
+        
+        # Extract JSON from each response with error handling
         results = []
-        for r in responses:
-            parsed = []
-            for output in r.outputs:
+        for response in responses:
+            extracted_json = []  # Default to empty list on failure
+            
+            for output in response.outputs:
                 try:
-                    parsed = output.text if isinstance(output.text, list) else json.loads(output.text)
-                    break
+                    if isinstance(output.text, list):
+                        extracted_json = output.text
+                    else:
+                        extracted_json = json.loads(output.text)
+                    break  # Successfully extracted, break from inner loop
                 except Exception:
-                    continue
-            results.append(parsed)
-        return results 
+                    continue  # Try next output if available
+            
+            results.append(extracted_json)
+        
+        return results

@@ -237,10 +237,10 @@ class BatchedARCTester(BaseARCTester):
             test_ids
         )
 
-        if not hasattr(self.provider, "extract_batched_json_from_response"):
+        if not hasattr(self.provider, "extract_batched_json_from_responses"):
             raise ValueError("Provider does not support batch prediction")
         answers = [attempt.answer for attempt in attempts]
-        parsed = self.provider.extract_batched_json_from_response(answers) # type: ignore
+        parsed = self.provider.extract_batched_json_from_responses(answers) # type: ignore
         for i, (parsed_answer, attempt) in enumerate(zip(parsed, attempts)):
             if parsed_answer is None:
                 raise ValueError(
