@@ -253,7 +253,7 @@ class BatchedARCTester(BaseARCTester):
         for task_id in task_ids:
             utils.validate_data(data_dir, task_id)
         
-        test_ids = [f'{self.config}_i' for i in range(len(task_ids))]
+        test_ids = [self.config] * len(task_ids)
 
         # Logic for overwrite. If save_submission_dir is provided, check if the submission already exists
         if self.save_submission_dir and not self.overwrite_submission:
