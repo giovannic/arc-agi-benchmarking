@@ -122,6 +122,7 @@ class AttemptMetadata(BaseModel):
     task_id: Optional[str] = None
     pair_index: Optional[int] = 0
     test_id: Optional[str] = None
+    logprob: Optional[float] = None
     
     model_config = {
         'json_encoders': {

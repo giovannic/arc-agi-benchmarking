@@ -786,3 +786,26 @@ models:
         seed: 42
         #prm_batch_size: 4
         # Add any other PRM config fields as needed
+
+
+  - name: "local-llama-top-n"
+    model_name: "llama-3-8b"
+    provider: "localllama"
+    pricing:
+      date: "2024-07-01"
+      input: 0.0
+      output: 0.0
+    kwargs:
+      approach: top_n
+      model_path: "meta-llama/Llama-3.2-1B-Instruct"
+      gpu_memory_utilization: 0.5
+      max_tokens: 100000
+      seed: 42
+      temperature: 0.3
+      top_p: .9
+      n: 20
+      prm_config:
+        model_path: "peiyi9979/math-shepherd-mistral-7b-prm"
+        seed: 42
+        #prm_batch_size: 4
+        # Add any other PRM config fields as needed
