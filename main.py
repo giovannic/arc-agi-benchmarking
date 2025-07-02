@@ -195,6 +195,9 @@ class BatchedARCTester(BaseARCTester):
         task_ids: List[str],
         test_ids: List[str],
         ) -> List[Attempt]:
+        if len(task_ids) == 0:
+            logger.warn("No tasks to run")
+            return []
         results: List[Tuple[str, str, str, int]] = [
             (
                 convert_task_pairs_to_prompt(tp, ti), 

@@ -23,7 +23,6 @@ class LocalLlamaAdapter(ProviderAdapter):
         # Build a Config object from model_config.kwargs, override approach and n
         config_kwargs = dict(self.model_config.kwargs)
         config_kwargs.setdefault('approach', 'top')
-        config_kwargs['n'] = 1
         config = Config(**{k: v for k, v in config_kwargs.items() if k != 'prm_config'})
         llm = LLM(model=config.model_path,
                   gpu_memory_utilization=getattr(config, 'gpu_memory_utilization', 0.5),
@@ -167,10 +166,12 @@ class LocalLlamaAdapter(ProviderAdapter):
         responses = sampler(self._llm, prompts, self._config)
         attempts = []
         for i, task_response in enumerate(responses):
-            for (answer, logprob) in task_response:
+            for response in task_response:
+                answer = response.outputs[0].text
+                logprob = response.outputs[0].cumulative_logprob
                 # For now, use dummy values for token/cost accounting
-                prompt_tokens = 0
-                completion_tokens_count = 0
+                prompt_tokens =  len(response.prompt_token_ids)
+                completion_tokens_count = len(response.outputs[0].token_ids)
                 total_tokens = prompt_tokens + completion_tokens_count
                 reasoning_tokens = 0
                 input_choices = [
