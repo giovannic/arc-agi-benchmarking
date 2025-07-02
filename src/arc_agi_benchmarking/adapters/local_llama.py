@@ -9,37 +9,37 @@ import numpy as np
 import json
 import logging
 from typing import List, Dict
-from thunk.top import Sampler, sample_top, sample_top_n
+from thunk.top import Sampler, sample_greedy, sample_n
 
 logger = logging.getLogger(__name__)
 
 APPROACHES : Dict[str, Sampler] = {
-    'top': sample_top,
-    'top_n': sample_top_n,
+    'greedy': sample_greedy,
+    'random': sample_n,
 }
 
 class LocalLlamaAdapter(ProviderAdapter):
     def init_client(self):
         # Build a Config object from model_config.kwargs, override approach and n
         config_kwargs = dict(self.model_config.kwargs)
-        config_kwargs.setdefault('approach', 'top')
+        config_kwargs.setdefault('approach', 'greedy')
         config = Config(**{k: v for k, v in config_kwargs.items() if k != 'prm_config'})
         llm = LLM(model=config.model_path,
                   gpu_memory_utilization=getattr(config, 'gpu_memory_utilization', 0.5),
                   enable_prefix_caching=True,
                   seed=getattr(config, 'seed', 42))
-        #prm_config = self.model_config.kwargs.get('prm_config', {})
-        #prm = load_prm(Config(**prm_config))
+        prm_config = self.model_config.kwargs.get('prm_config', {})
         prm = None
+        if prm_config:
+            prm = load_prm(Config(**prm_config))
         self._config = config
         self._llm = llm
-        #self._prm = prm
+        self._prm = prm
         return (llm, prm)
 
     def make_prediction(self, prompt: str, task_id: str, test_id: str, pair_index: int) -> Attempt:
         start_time = datetime.now(timezone.utc)
         x = {"problem": [prompt]}
-        # result = best_of_n(x, self._config, self._llm, self._prm)  # For future use
         # Prepare input for LLM
         sampling_params = SamplingParams(
             temperature=getattr(self._config, 'temperature', 0.0),
@@ -162,7 +162,7 @@ class LocalLlamaAdapter(ProviderAdapter):
             List (task_id) of list (n attempts) of Attempt objects
         """
         start_time = datetime.now(timezone.utc)
-        sampler = APPROACHES.get(self._config.approach, sample_top)
+        sampler = APPROACHES.get(self._config.approach, sample_greedy)
         responses = sampler(self._llm, prompts, self._config)
         attempts = []
         for i, task_response in enumerate(responses):
